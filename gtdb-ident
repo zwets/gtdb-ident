@@ -1,0 +1,137 @@
+#!/bin/sh
+#
+#  gtdb-ident - Rapid taxonomic assignment to the GTDB
+#  Copyright (C) 2019  Marco van Zwetselaar <io@zwets.it>
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#  Home: https://github.com/zwets/gtdb-ident
+
+# Make sure sorting is reproducible
+export LC_ALL="C"
+
+# Set parameters and defaults
+THIS_DIR="$(dirname "$(realpath "$0")")"
+DATA_DIR="$THIS_DIR/data"
+GTDB_KDB="$DATA_DIR/gtdb.kdb"
+GTDB_TAX="$DATA_DIR/gtdb.tax"
+KMER_SIZE=20
+SELECTION=0.02
+
+# Function to emit $* when verbose
+emit() {
+    [ -z "$VERBOSE" ] || echo "$(basename "$0"): $*" >&2
+}
+
+# Function to exit with error message on stderr
+err_exit() {
+    echo "$(basename "$0"): $*" >&2
+    exit 1
+}
+
+# Function to show usage information and exit
+usage_exit() {
+    echo "
+Usage: $(basename $0) [OPTIONS] [FILE ...]
+  
+  Assign each (optionally compressed) FASTA or FASTQ format FILE to the
+  nearest representative genome in the GTDB reference database.
+
+  Writes to stdout for each input FILE a line with the accession that it
+  shares most kmers with, the GTDB species of that accession, as well as
+  the numbers of distinct kmers in subject and target, the number of
+  shared kmers, the shared kmers as a percentage of the target kmers, and
+  the jacquard coefficient (shared / total).
+
+  The first time it is run, $(basename $0) creates an index of the GTDB-Tk
+  database.  Find more information at https://github.com/zwets/gtdb-ident.
+" >&2
+    exit ${1:-1}
+}
+
+# Check prerequisite - kmer-db binary
+KMER_DB_EXE="$(which kmer-db 2>/dev/null)" || KMER_DB_EXE="$THIS_DIR/kmer-db"
+[ -x "$KMER_DB_EXE" ] || err_exit "kmer-db not found: must be on PATH or symlinked from $KMER_DB_EXE"
+
+# Set path to GTDB database directory (optionally present)
+GTDBTK_DATA="${GTDBTK_DATA_PATH:-"$THIS_DIR/gtdb-data"}"
+
+# Function to create kmer-db database from the GTDB-Tk data
+create_kdb() {
+    emit "creating kmer-db from GTDB-Tk database"
+    [ -d "$GTDBTK_DATA" ] || err_exit "GTDB-Tk data not found: set GTDBTK_DATA_PATH or symlink from $GTDBTK_DATA"
+
+    local TAX_FILE="$GTDBTK_DATA/taxonomy/gtdb_taxonomy.tsv"
+    [ -f "$TAX_FILE" ] || err_exit "GTDB-Tk taxonomy file not found: $TAX_FILE"
+    local SEQS_DIR="$GTDBTK_DATA/fastani/database"
+    [ -d "$SEQS_DIR" ] || err_exit "GTDB-Tk fastani database not found: $SEQS_DIR"
+
+    mkdir -p "$DATA_DIR" &&
+    emit "producing taxonomy index: $GTDB_TAX" &&
+    sed -Ee 's/^(GB|RS)_//' "$TAX_FILE" >"$GTDB_TAX" &&
+    TMP_LIST="$(mktemp)" &&
+    cut -f1 "$GTDB_TAX" | sed -e "s@^@$SEQS_DIR/@;s@\$@_genomic.fna.gz@" >"$TMP_LIST" &&
+    emit "building kmer-db index: $GTDB_KDB"
+    "$KMER_DB_EXE" build -k $KMER_SIZE -f $SELECTION "$TMP_LIST" "$GTDB_KDB" &&
+    rm -f "$TMP_LIST" || err_exit "failed to create Kmer-db database: $GTDB_KDB"
+}
+
+# Parse options
+
+unset VERBOSE
+while [ $# -ne 0 -a "$(expr "$1" : '\(.\)..*')" = "-" ]; do
+    case $1 in
+    -v|--verbose)
+        VERBOSE=1
+        ;;
+    -h|--help)
+        usage_exit 0
+        ;;
+    *) usage_exit
+        ;;
+    esac
+    shift
+done
+
+# Check if kmer database is present else create
+[ -f "$GTDB_KDB" ] && [ -f "$GTDB_TAX" ] || create_kdb || err_exit "failed to create kmer-db"
+
+# Create input and output temp names
+INP_LIST="$(mktemp --suffix=".lst")"
+OUT_FILE="$(echo "$INP_LIST" | sed -e 's/.lst$/.out/')"
+
+# Write the INP_LIST
+while [ $# -ne 0 ]; do echo "$1"; shift; done >"$INP_LIST"
+
+# Run kmer-db
+"$KMER_DB_EXE" new2all "$GTDB_KDB" "$INP_LIST" "$OUT_FILE" || err_exit "failure while running kmer-db"
+
+# Process the OUT_FILE
+awk -v "TAX=$GTDB_TAX" '
+    BEGIN { FS="\t"; OFS="\t"; while (getline <TAX) SPC[$1 "_genomic.fna.gz"] = $2; FS=","; }
+    NR==1 { split($0, IDS);
+            print "#sequence\tseq_kmers\ttarget\ttgt_kmers\tshared_kmers\tpct_target\tjaquard\tspecies"; }
+    NR==2 { split($0, KMS) }
+    NR>2  { M=0; S=0; for (I=3; I<=NF; ++I) if ($I > S) { M=I; S=$I; }
+            if (S==0)
+                print $1, $2,     "",      0, "",       "",              "",          "";
+            else
+                print $1, $2, IDS[M], KMS[M],  S, S/KMS[M], S/($2+KMS[M]-S), SPC[IDS[M]];
+          }
+    ' "$OUT_FILE"
+
+# Clean up
+rm -f "$INP_LIST" "$OUT_FILE"
+
+# vim: sts=4:sw=4:et:si:ai

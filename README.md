@@ -24,7 +24,7 @@ closest to the query genome.
 ## Running
 
 ```bash
-./gtdb-ident examples/sample1.fna.gz
+./gtdb-ident examples/genome.fna.gz examples/myreads.fq.gz ...
 ```
 
 
@@ -34,12 +34,12 @@ closest to the query genome.
 
   Follow <https://github.com/Ecogenomics/GTDBTk#gtdb-tk-reference-data> to
   download and unpack the GTDB reference data.  If you have already installed
-  GTDB-Tk, you will already have this data at `GTDBTK_DATA_PATH`.
+  GTDB-Tk, you will have this data at `GTDBTK_DATA_PATH`.
 
   Either point `GTDBTK_DATA_PATH` at the unpacked data (as for GTDB-Tk), or
-  create a symlink `gtdb-data` to it in `gtdb-ident`'s directory:
+  create a symlink named `gtdb-data` to it in `gtdb-ident`'s directory:
 
-      ln -sfT /path/to/unpacked/..../releaseXX ./gtdb-data
+      ln -sfT /path/to/releaseXX ./gtdb-data
 
 * Install Kmer-db
 
