@@ -83,7 +83,7 @@ create_kdb() {
     TMP_LIST="$(mktemp)" &&
     cut -f1 "$GTDB_TAX" | sed -e "s@^@$SEQS_DIR/@;s@\$@_genomic.fna.gz@" >"$TMP_LIST" &&
     emit "building kmer-db index: $GTDB_KDB"
-    "$KMER_DB_EXE" build -k $KMER_SIZE -f $SELECTION "$TMP_LIST" "$GTDB_KDB" &&
+    "$KMER_DB_EXE" build -k $KMER_SIZE -f $SELECTION "$TMP_LIST" "$GTDB_KDB" >$KMER_DB_STDOUT &&
     rm -f "$TMP_LIST" || err_exit "failed to create Kmer-db database: $GTDB_KDB"
 }
 
@@ -104,8 +104,14 @@ while [ $# -ne 0 -a "$(expr "$1" : '\(.\)..*')" = "-" ]; do
     shift
 done
 
+# Correct kmer-db odd practice of sending diagnostic output to stdout
+[ -n "$VERBOSE" ] && KMER_DB_STDOUT="/dev/stderr" || KMER_DB_STDOUT="/dev/null"
+
 # Check if kmer database is present else create
 [ -f "$GTDB_KDB" ] && [ -f "$GTDB_TAX" ] || create_kdb || err_exit "failed to create kmer-db"
+
+# Stop now if no inputs
+[ $# -ne 0 ] || exit 0
 
 # Create input and output temp names
 INP_LIST="$(mktemp --suffix=".lst")"
@@ -115,7 +121,7 @@ OUT_FILE="$(echo "$INP_LIST" | sed -e 's/.lst$/.out/')"
 while [ $# -ne 0 ]; do echo "$1"; shift; done >"$INP_LIST"
 
 # Run kmer-db
-"$KMER_DB_EXE" new2all "$GTDB_KDB" "$INP_LIST" "$OUT_FILE" || err_exit "failure while running kmer-db"
+"$KMER_DB_EXE" new2all "$GTDB_KDB" "$INP_LIST" "$OUT_FILE" >$KMER_DB_STDOUT || err_exit "failure while running kmer-db"
 
 # Process the OUT_FILE
 awk -v "TAX=$GTDB_TAX" '
