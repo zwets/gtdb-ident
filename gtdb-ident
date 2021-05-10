@@ -85,7 +85,7 @@ create_kdb() {
     emit "producing taxonomy index: $GTDB_TAX" &&
     sed -Ee 's/^(GB|RS)_//' "$TAX_FILE" >"$GTDB_TAX" &&
     TMP_LIST="$(mktemp)" &&
-    cut -f1 "$GTDB_TAX" | sed -e "s@^@$SEQS_DIR/@;s@\$@_genomic.fna.gz@" >"$TMP_LIST" &&
+    cut -f1 "$GTDB_TAX" | sed -Ee "s@^(GC.)_(...)(...)(...)(.*)@$SEQS_DIR/\1/\2/\3/\4/\1_\2\3\4\5_genomic.fna.gz@" >"$TMP_LIST" &&
     emit "building kmer-db index: $GTDB_KDB"
     "$KMER_DB_EXE" -t $THREADS build -k $KMER_SIZE -f $SELECTION "$TMP_LIST" "$GTDB_KDB" >$KMER_DB_STDOUT &&
     rm -f "$TMP_LIST" || err_exit "failed to create Kmer-db database: $GTDB_KDB"
