@@ -27,7 +27,7 @@ DATA_DIR="$THIS_DIR/data"
 GTDB_KDB="$DATA_DIR/gtdb.kdb"
 GTDB_TAX="$DATA_DIR/gtdb.tax"
 KMER_SIZE=20
-SELECTION=0.02
+SELECTION=0.01
 THREADS=$(($(nproc)/2))
 
 # Function to emit $* when verbose
@@ -96,20 +96,11 @@ create_kdb() {
 unset VERBOSE
 while [ $# -ne 0 -a "$(expr "$1" : '\(.\)..*')" = "-" ]; do
     case $1 in
-    -t|--threads)
-        shift && THREADS=$1 || usage_exit
-        ;;
-    --threads=*)
-        THREADS=${1#--threads=}
-        ;;
-    -v|--verbose)
-        VERBOSE=1
-        ;;
-    -h|--help)
-        usage_exit 0
-        ;;
-    *) usage_exit
-        ;;
+    -t|--t*) shift && THREADS=$1 || usage_exit ;;
+    --t*=*)  THREADS=${1#--t*=} ;;
+    -v|--v*) VERBOSE=1 ;;
+    -h|--h*) usage_exit 0 ;;
+    *)       usage_exit ;;
     esac
     shift
 done

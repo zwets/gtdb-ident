@@ -27,6 +27,8 @@ closest to the query genome.
 ./gtdb-ident examples/genome.fna.gz examples/myreads.fq.gz ...
 ```
 
+Note that running a batch of files is much more efficient that doing them
+one after the other, as it takes a long while for the database to load.
 
 ## Installation
 
@@ -59,8 +61,11 @@ closest to the query genome.
 
       ./gtdb-ident  # Generates index
 
-  The indexing process takes a while time and generates a large (15G) file
+  The indexing process takes a while time and generates a large (23G) file
   in `./data/`.
+
+  **Note** to reduce the size of the database (and memory usage), set the
+  value of `SELECTION` in the script to a lower value.
 
 * \[Optional\] Remove the GTDB-Tk data reference data
 
